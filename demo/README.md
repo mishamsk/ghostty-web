@@ -35,6 +35,23 @@ HOST=192.0.2.10 GHOSTTY_ALLOWED_HOSTS=demo.example npx @ghostty-web/demo@next
 
 Then open http://127.0.0.1:8080 in your browser.
 
+## Running a checkout in the background
+
+The repository includes `just` recipes for installing the demo dependencies and
+running this checkout as a detached local process:
+
+```bash
+cp .env.example .env
+# Edit .env for the bind address, port, and allowed browser-visible hosts.
+just start
+just status
+just logs
+just stop
+```
+
+Runtime state and logs are written under
+`~/.local/state/ghostty-web-demo`. The local `.env` file is ignored by Git.
+
 ## Bind host and proxy configuration
 
 The demo binds to `127.0.0.1` by default and only allows loopback hostnames (`localhost`, `127.0.0.1`, and `::1`) unless configured otherwise. Set `HOST=<host>` to change the bind address. If you serve the demo through another hostname, or bind to a wildcard such as `HOST=0.0.0.0`, add the browser-visible hostnames with `GHOSTTY_ALLOWED_HOSTS=host1,host2`.

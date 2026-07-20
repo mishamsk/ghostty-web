@@ -112,84 +112,36 @@ const HTML_TEMPLATE = `<!doctype html>
         box-sizing: border-box;
       }
 
+      :root {
+        color-scheme: dark;
+        background: #1e1e1e;
+        --terminal-height: 100dvh;
+        --terminal-inset: 2px;
+      }
+
+      html,
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #1e1e1e;
       }
 
       .terminal-window {
-        width: 100%;
-        max-width: 1000px;
+        width: 100vw;
+        height: var(--terminal-height);
         background: #1e1e1e;
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         overflow: hidden;
       }
 
       .title-bar {
-        background: #2d2d2d;
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        border-bottom: 1px solid #1a1a1a;
-      }
-
-      .traffic-lights {
-        display: flex;
-        gap: 8px;
-      }
-
-      .light {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-      }
-
-      .light.red { background: #ff5f56; }
-      .light.yellow { background: #ffbd2e; }
-      .light.green { background: #27c93f; }
-
-      .title {
-        color: #e5e5e5;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: 0.3px;
-      }
-
-      .connection-status {
-        margin-left: auto;
-        font-size: 11px;
-        color: #888;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #888;
-      }
-
-      .status-dot.connected { background: #27c93f; }
-      .status-dot.disconnected { background: #ff5f56; }
-      .status-dot.connecting { background: #ffbd2e; animation: pulse 1s infinite; }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
+        display: none;
       }
 
       .terminal-content {
-        height: 600px;
-        padding: 16px;
+        width: 100%;
+        height: 100%;
+        padding: var(--terminal-inset);
         background: #1e1e1e;
         position: relative;
         overflow: hidden;
@@ -198,12 +150,6 @@ const HTML_TEMPLATE = `<!doctype html>
       /* Ensure terminal canvas can handle scrolling */
       .terminal-content canvas {
         display: block;
-      }
-
-      @media (max-width: 768px) {
-        .terminal-content {
-          height: 500px;
-        }
       }
     </style>
   </head>
@@ -232,7 +178,7 @@ const HTML_TEMPLATE = `<!doctype html>
         cols: 80,
         rows: 24,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
-        fontSize: 14,
+        fontSize: 12,
         theme: {
           background: '#1e1e1e',
           foreground: '#d4d4d4',
@@ -341,29 +287,17 @@ const HTML_TEMPLATE = `<!doctype html>
 
       // Handle mobile keyboard showing/hiding using visualViewport API
       if (window.visualViewport) {
-        const terminalContent = document.querySelector('.terminal-content');
-        const terminalWindow = document.querySelector('.terminal-window');
-        const originalHeight = terminalContent.style.height;
-        const body = document.body;
-
-        window.visualViewport.addEventListener('resize', () => {
-          const keyboardHeight = window.innerHeight - window.visualViewport.height;
-          if (keyboardHeight > 100) {
-            body.style.padding = '0';
-            body.style.alignItems = 'flex-start';
-            terminalWindow.style.borderRadius = '0';
-            terminalWindow.style.maxWidth = '100%';
-            terminalContent.style.height = (window.visualViewport.height - 60) + 'px';
-            window.scrollTo(0, 0);
-          } else {
-            body.style.padding = '40px 20px';
-            body.style.alignItems = 'center';
-            terminalWindow.style.borderRadius = '12px';
-            terminalWindow.style.maxWidth = '1000px';
-            terminalContent.style.height = originalHeight || '600px';
-          }
+        const fitVisualViewport = () => {
+          document.documentElement.style.setProperty(
+            '--terminal-height',
+            window.visualViewport.height + 'px',
+          );
+          window.scrollTo(0, 0);
           fitAddon.fit();
-        });
+        };
+
+        window.visualViewport.addEventListener('resize', fitVisualViewport);
+        fitVisualViewport();
       }
     </script>
   </body>

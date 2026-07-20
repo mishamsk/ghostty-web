@@ -3,6 +3,9 @@ dist/
 .DS_Store
 *.log
 .vite/
+.env
+.env.*
+!.env.example
 
 # WASM build output (built locally and in CI)
 ghostty-vt.wasm
