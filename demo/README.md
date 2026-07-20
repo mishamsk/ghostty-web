@@ -50,7 +50,9 @@ just stop
 ```
 
 Runtime state and logs are written under
-`~/.local/state/ghostty-web-demo`. The local `.env` file is ignored by Git.
+`~/.local/state/ghostty-web-demo`. On macOS the detached process is managed by
+`launchd`; other platforms use `nohup` (and `setsid` when available). The local
+`.env` file is ignored by Git.
 
 ## Bind host and proxy configuration
 
