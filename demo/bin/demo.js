@@ -25,6 +25,7 @@ import {
   validateTokenRequest,
   validateWebSocketRequest,
 } from './auth.js';
+import { CLIPBOARD_MESSAGE_PREFIX, createOsc52Parser, encodeClipboardMessage } from './osc52.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,6 +180,9 @@ const HTML_TEMPLATE = `<!doctype html>
         rows: 24,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
         fontSize: 12,
+        // Preserve application mouse clicks and drags without forwarding idle
+        // pointer movement to applications that request mode 1003.
+        applicationMouseHoverReporting: false,
         theme: {
           background: '#1e1e1e',
           foreground: '#d4d4d4',
@@ -228,6 +232,48 @@ const HTML_TEMPLATE = `<!doctype html>
         return protocol + '//' + window.location.host + '/ws?' + params.toString();
       }
 
+      const clipboardMessagePrefix = ${JSON.stringify(CLIPBOARD_MESSAGE_PREFIX)};
+
+      function copyWithExecCommand(text) {
+        const previouslyFocused = document.activeElement;
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.readOnly = true;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+
+        let copied = false;
+        try {
+          textarea.focus();
+          textarea.select();
+          textarea.setSelectionRange(0, text.length);
+          copied = document.execCommand('copy');
+        } finally {
+          textarea.remove();
+          if (previouslyFocused instanceof HTMLElement) {
+            previouslyFocused.focus();
+          }
+        }
+        return copied;
+      }
+
+      function writeBrowserClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch((error) => {
+            if (!copyWithExecCommand(text)) {
+              console.warn('OSC 52 clipboard write was blocked by the browser:', error);
+            }
+          });
+          return;
+        }
+
+        if (!copyWithExecCommand(text)) {
+          console.warn('OSC 52 clipboard write was blocked by the browser');
+        }
+      }
+
       async function connect() {
         setStatus('connecting', 'Authenticating...');
 
@@ -250,6 +296,17 @@ const HTML_TEMPLATE = `<!doctype html>
         };
 
         ws.onmessage = (event) => {
+          if (typeof event.data === 'string' && event.data.startsWith(clipboardMessagePrefix)) {
+            try {
+              const text = JSON.parse(event.data.slice(clipboardMessagePrefix.length));
+              if (typeof text === 'string') {
+                writeBrowserClipboard(text);
+              }
+            } catch (error) {
+              console.warn('Invalid clipboard message from demo server:', error);
+            }
+            return;
+          }
           term.write(event.data);
         };
 
@@ -531,10 +588,16 @@ wss.on('connection', (ws, req) => {
 
   // Create PTY
   const ptyProcess = createPtySession(cols, rows);
+  const osc52Parser = createOsc52Parser(({ text }) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(encodeClipboardMessage(text));
+    }
+  });
   sessions.set(ws, { pty: ptyProcess });
 
   // PTY -> WebSocket
   ptyProcess.onData((data) => {
+    osc52Parser.push(data);
     if (ws.readyState === ws.OPEN) {
       ws.send(data);
     }

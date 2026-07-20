@@ -166,6 +166,8 @@ export interface MouseTrackingConfig {
   hasMouseTracking: () => boolean;
   /** Check if SGR extended mouse mode is enabled (mode 1006) */
   hasSgrMouseMode: () => boolean;
+  /** Whether mode 1003 should report movement when no button is pressed */
+  allowMouseHover: () => boolean;
   /** Get cell dimensions for pixel to cell conversion */
   getCellDimensions: () => { width: number; height: number };
   /** Get canvas/container offset for accurate position calculation */
@@ -197,6 +199,7 @@ export class InputHandler {
   private isComposing = false;
   private isDisposed = false;
   private mouseButtonsPressed = 0; // Track which buttons are pressed for motion reporting
+  private lastMouseMove?: { col: number; row: number; button: number; modifiers: number };
   private lastKeyDownData: string | null = null;
   private lastKeyDownTime = 0;
   private lastPasteData: string | null = null;
@@ -830,6 +833,7 @@ export class InputHandler {
 
     // Track pressed buttons for motion events
     this.mouseButtonsPressed |= 1 << button;
+    this.lastMouseMove = undefined;
 
     this.sendMouseEvent(button, cell.col, cell.row, false, event);
 
@@ -852,6 +856,7 @@ export class InputHandler {
 
     // Clear pressed button
     this.mouseButtonsPressed &= ~(1 << button);
+    this.lastMouseMove = undefined;
 
     this.sendMouseEvent(button, cell.col, cell.row, true, event);
   }
@@ -863,6 +868,20 @@ export class InputHandler {
     if (this.isDisposed) return;
     if (!this.mouseConfig?.hasMouseTracking()) return;
 
+    // Browser mousemove events carry the authoritative current button state.
+    // This repairs stale state when mouseup happened outside the terminal or
+    // browser window and was therefore not delivered to our element listener.
+    if (typeof event.buttons === 'number') {
+      let pressed = 0;
+      if (event.buttons & 1) pressed |= 1; // Left
+      if (event.buttons & 4) pressed |= 2; // Middle
+      if (event.buttons & 2) pressed |= 4; // Right
+      if (pressed !== this.mouseButtonsPressed) {
+        this.mouseButtonsPressed = pressed;
+        this.lastMouseMove = undefined;
+      }
+    }
+
     // Check if button motion mode or any-event tracking is enabled
     // Mode 1002 = button motion, Mode 1003 = any motion
     const hasButtonMotion = this.getModeCallback?.(1002) ?? false;
@@ -870,19 +889,39 @@ export class InputHandler {
 
     if (!hasButtonMotion && !hasAnyMotion) return;
 
+    // Some embedders want application clicks and drags without continuously
+    // forwarding idle pointer movement requested by mode 1003.
+    if (hasAnyMotion && this.mouseButtonsPressed === 0 && !this.mouseConfig.allowMouseHover()) {
+      return;
+    }
+
     // In button motion mode, only report if a button is pressed
     if (hasButtonMotion && !hasAnyMotion && this.mouseButtonsPressed === 0) return;
 
     const cell = this.pixelToCell(event);
     if (!cell) return;
 
-    // Determine which button to report (or 32 for motion with no button)
-    let button = 32; // Motion flag
+    // The low two bits must be 3 when no button is pressed. Starting at 32
+    // would encode an ordinary hover as a left-button drag.
+    let button = 35; // Motion flag (32) + no button (3)
     if (this.mouseButtonsPressed & 1)
-      button += 0; // Left
+      button = 32; // Motion flag + left
     else if (this.mouseButtonsPressed & 2)
-      button += 1; // Middle
-    else if (this.mouseButtonsPressed & 4) button += 2; // Right
+      button = 33; // Motion flag + middle
+    else if (this.mouseButtonsPressed & 4) button = 34; // Motion flag + right
+
+    // Mouse protocols report cells, not pixels. Avoid flooding the PTY with
+    // identical events as the pointer moves within a single cell.
+    const modifiers = this.getMouseModifiers(event);
+    if (
+      this.lastMouseMove?.col === cell.col &&
+      this.lastMouseMove.row === cell.row &&
+      this.lastMouseMove.button === button &&
+      this.lastMouseMove.modifiers === modifiers
+    ) {
+      return;
+    }
+    this.lastMouseMove = { col: cell.col, row: cell.row, button, modifiers };
 
     this.sendMouseEvent(button, cell.col, cell.row, false, event);
   }

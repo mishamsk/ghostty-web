@@ -38,6 +38,17 @@ interface MockInputEvent {
   stopPropagation: () => void;
 }
 
+interface MockMouseEvent {
+  type: 'mousedown' | 'mouseup' | 'mousemove';
+  button: number;
+  buttons?: number;
+  clientX: number;
+  clientY: number;
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+}
+
 interface MockHTMLElement {
   addEventListener: (event: string, handler: (e: any) => void) => void;
   removeEventListener: (event: string, handler: (e: any) => void) => void;
@@ -97,6 +108,25 @@ function createBeforeInputEvent(inputType: string, data: string | null): MockInp
     isComposing: false,
     preventDefault: mock(() => {}),
     stopPropagation: mock(() => {}),
+  };
+}
+
+function createMouseEvent(
+  type: MockMouseEvent['type'],
+  clientX: number,
+  clientY: number,
+  button = 0,
+  buttons?: number
+): MockMouseEvent {
+  return {
+    type,
+    button,
+    buttons,
+    clientX,
+    clientY,
+    shiftKey: false,
+    metaKey: false,
+    ctrlKey: false,
   };
 }
 interface MockCompositionEvent {
@@ -980,6 +1010,93 @@ describe('InputHandler', () => {
       expect(dataReceived.length).toBe(1);
       // Alt+A often produces ESC a or similar
       expect(dataReceived[0].length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Mouse Tracking', () => {
+    function createMouseHandler(enabledModes: number[]): InputHandler {
+      return new InputHandler(
+        ghostty,
+        container as any,
+        (data) => dataReceived.push(data),
+        () => {
+          bellCalled = true;
+        },
+        undefined,
+        undefined,
+        (mode) => enabledModes.includes(mode),
+        undefined,
+        undefined,
+        {
+          hasMouseTracking: () => true,
+          hasSgrMouseMode: () => true,
+          allowMouseHover: () => true,
+          getCellDimensions: () => ({ width: 10, height: 20 }),
+          getCanvasOffset: () => ({ left: 5, top: 10 }),
+        }
+      );
+    }
+
+    test('encodes hover motion as no-button motion', () => {
+      const handler = createMouseHandler([1003]);
+
+      container.dispatchEvent(createMouseEvent('mousemove', 20, 60));
+
+      expect(dataReceived).toEqual(['\x1b[<35;2;3M']);
+      handler.dispose();
+    });
+
+    test('does not report hover motion in button-motion mode', () => {
+      const handler = createMouseHandler([1002]);
+
+      container.dispatchEvent(createMouseEvent('mousemove', 20, 60));
+
+      expect(dataReceived).toEqual([]);
+      handler.dispose();
+    });
+
+    test('can suppress idle any-motion reports without suppressing drags', () => {
+      const handler = createMouseHandler([1003]);
+      const mouseConfig = (handler as any).mouseConfig;
+      mouseConfig.allowMouseHover = () => false;
+
+      container.dispatchEvent(createMouseEvent('mousemove', 20, 60, 0, 0));
+      container.dispatchEvent(createMouseEvent('mousedown', 20, 60));
+      container.dispatchEvent(createMouseEvent('mousemove', 30, 60, 0, 1));
+
+      expect(dataReceived).toEqual(['\x1b[<0;2;3M', '\x1b[<32;3;3M']);
+      handler.dispose();
+    });
+
+    test('reports left-button motion while dragging', () => {
+      const handler = createMouseHandler([1002]);
+
+      container.dispatchEvent(createMouseEvent('mousedown', 20, 60));
+      container.dispatchEvent(createMouseEvent('mousemove', 30, 60));
+
+      expect(dataReceived).toEqual(['\x1b[<0;2;3M', '\x1b[<32;3;3M']);
+      handler.dispose();
+    });
+
+    test('repairs a missed mouseup from the current browser button state', () => {
+      const handler = createMouseHandler([1002]);
+
+      container.dispatchEvent(createMouseEvent('mousedown', 20, 60));
+      container.dispatchEvent(createMouseEvent('mousemove', 30, 60, 0, 0));
+
+      expect(dataReceived).toEqual(['\x1b[<0;2;3M']);
+      handler.dispose();
+    });
+
+    test('reports at most one mouse move per cell', () => {
+      const handler = createMouseHandler([1003]);
+
+      container.dispatchEvent(createMouseEvent('mousemove', 20, 60));
+      container.dispatchEvent(createMouseEvent('mousemove', 21, 61));
+      container.dispatchEvent(createMouseEvent('mousemove', 30, 60));
+
+      expect(dataReceived).toEqual(['\x1b[<35;2;3M', '\x1b[<35;3;3M']);
+      handler.dispose();
     });
   });
 

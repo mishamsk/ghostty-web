@@ -18,6 +18,8 @@ export interface ITerminalOptions {
   // Phase 1 additions
   convertEol?: boolean; // Convert \n to \r\n (default: false)
   disableStdin?: boolean; // Disable keyboard input (default: false)
+  /** Report pointer movement when no mouse button is pressed and mode 1003 is active. */
+  applicationMouseHoverReporting?: boolean; // Default: true
 
   // Scrolling options
   smoothScrollDuration?: number; // Duration in ms for smooth scroll animation (default: 100, 0 = instant)

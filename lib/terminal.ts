@@ -151,6 +151,7 @@ export class Terminal implements ITerminalCore {
       allowTransparency: options.allowTransparency ?? false,
       convertEol: options.convertEol ?? false,
       disableStdin: options.disableStdin ?? false,
+      applicationMouseHoverReporting: options.applicationMouseHoverReporting ?? true,
       smoothScrollDuration: options.smoothScrollDuration ?? 100, // Default: 100ms smooth scroll
     };
 
@@ -436,6 +437,7 @@ export class Terminal implements ITerminalCore {
       const mouseConfig: MouseTrackingConfig = {
         hasMouseTracking: () => wasmTerm?.hasMouseTracking() ?? false,
         hasSgrMouseMode: () => wasmTerm?.getMode(1006, false) ?? true, // SGR extended mode
+        allowMouseHover: () => this.options.applicationMouseHoverReporting,
         getCellDimensions: () => ({
           width: renderer.charWidth,
           height: renderer.charHeight,

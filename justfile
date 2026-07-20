@@ -10,12 +10,18 @@ legacy_launch_label := "com.coder.ghostty-web-demo.local"
 default:
     @just --list
 
-# Install the demo's pinned dependencies.
+# Install the checkout and demo's pinned dependencies.
 install:
+    bun install --frozen-lockfile
     bun install --cwd demo --frozen-lockfile
 
+# Build the local browser assets using the committed WASM binary.
+build: install
+    bun run build:lib
+    bun run build:wasm-copy
+
 # Start the local demo as a detached background process.
-start: install
+start: build
     #!/usr/bin/env bash
     set -euo pipefail
 
